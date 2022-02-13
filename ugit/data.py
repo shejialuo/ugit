@@ -10,6 +10,21 @@ def init():
     os.makedirs(GIT_DIR)
     os.makedirs(f'{GIT_DIR}/objects')
 
+def set_HEAD(oid):
+    """
+    set HEAD file content to current commit OID
+    """
+    with open(f'{GIT_DIR}/HEAD', 'w') as f:
+        f.write(oid)
+
+def get_HEAD():
+    """
+    get current commit OID from HEAD file
+    """
+    if os.path.isfile(f'{GIT_DIR}/HEAD'):
+        with open(f'{GIT_DIR}/HEAD') as f:
+            return f.read().strip()
+
 def hash_object(data, type_ = 'blob'):
     '''
     compute object ID and optionally create a blob from file
