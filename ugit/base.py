@@ -106,6 +106,14 @@ def commit(message):
     data.set_HEAD(oid)
     return oid
 
+def checkout(oid):
+    """
+    checkout branch or paths to working directory
+    """
+    commit = get_commit(oid)
+    read_tree(commit.tree)
+    data.set_HEAD(oid)
+
 Commit = namedtuple('Commit', ['tree', 'parent', 'message'])
 
 def get_commit(oid):
