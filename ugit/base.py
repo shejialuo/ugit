@@ -137,11 +137,30 @@ def create_branch(name, oid):
     """
     data.update_ref(f'refs/heads/{name}', data.RefValue(symbolic=False, value=oid))
 
+def iter_branch_names():
+    """
+    iterate all the branch
+    """
+    for refname, _ in data.iter_refs('refs/heads/'):
+        yield os.path.relpath(refname, 'refs/heads/')
+
 def is_branch(branch):
     """
     a helper function to test whether it is a branch
     """
     return data.get_ref(f'refs/heads/{branch}').value is not None
+
+def get_branch_name():
+    """
+    get branch name
+    """
+    HEAD = data.get_ref('HEAD', deref=False)
+    if not HEAD.symbolic:
+        return None
+    HEAD = HEAD.value
+    if not HEAD.startswith('refs/heads/'):
+        raise ValueError(f'{HEAD} not start with refs/heads/')
+    return os.path.relpath(HEAD, 'refs/heads')
 
 Commit = namedtuple('Commit', ['tree', 'parent', 'message'])
 
