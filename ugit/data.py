@@ -1,6 +1,8 @@
 import hashlib
 import os
 
+from collections import namedtuple
+
 GIT_DIR='.ugit'
 
 def init():
@@ -10,25 +12,47 @@ def init():
     os.makedirs(GIT_DIR)
     os.makedirs(f'{GIT_DIR}/objects')
 
-def update_ref(ref, oid):
+RefValue = namedtuple('RefValue', ['symbolic', 'value'])
+
+def update_ref(ref, value, deref=True):
     """
     update reference file OID
     """
+    ref = _get_ref_internal(ref, deref)[0]
+    if value.symbolic:
+        value = f'ref: {value.value}'
+    else:
+        value = value.value
     ref_path = f'{GIT_DIR}/{ref}'
     os.makedirs(os.path.dirname(ref_path), exist_ok=True)
     with open(ref_path, 'w') as f:
-        f.write(oid)
+        f.write(value)
 
-def get_ref(ref):
+def get_ref(ref, deref=True):
     """
     get reference file OID
     """
+    return _get_ref_internal(ref, deref)[1]
+
+def _get_ref_internal(ref, deref):
+    """
+    a helper function which returns the path and the value
+    of the last ref pointed by a symbolic ref
+    """
     ref_path = f'{GIT_DIR}/{ref}'
+    value = None
     if os.path.isfile(ref_path):
         with open(ref_path) as f:
-            return f.read().strip()
+            value = f.read().strip()
+    symbolic = bool (value) and value.startswith ('ref:')
+    if symbolic:
+        value = value.split(':', 1)[1].strip()
+        if deref:
+            return _get_ref_internal(value, deref=True)
+    return ref, RefValue(symbolic=symbolic, value=value)
 
-def iter_refs():
+
+def iter_refs(deref=True):
     """
     a generator which will iterate on all available refs
     from the ugit directory and everything under .ugit/refs
@@ -39,7 +63,7 @@ def iter_refs():
         refs.extend(f'{root}/{name}' for name in filenames)
 
     for refname in refs:
-        yield refname, get_ref(refname)
+        yield refname, get_ref(refname, deref=deref)
 
 def hash_object(data, type_ = 'blob'):
     '''

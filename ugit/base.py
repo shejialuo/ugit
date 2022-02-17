@@ -7,6 +7,10 @@ from collections import deque, namedtuple
 
 from . import data
 
+def init():
+    data.init()
+    data.update_ref('HEAD', data.RefValue(symbolic=True, value='refs/heads/master'))
+
 def write_tree(directory='.'):
     """
     create tree from current index
@@ -98,28 +102,46 @@ def commit(message):
     the object database with the type of "commit"
     """
     commit = f'tree {write_tree()}\n'
-    HEAD = data.get_ref('HEAD')
+    HEAD = data.get_ref('HEAD').value
     if HEAD:
         commit += f'parent {HEAD}\n'
     commit += '\n'
     commit += f'{message}\n'
     oid = data.hash_object(commit.encode(), 'commit')
-    data.update_ref('HEAD', oid)
+    data.update_ref('HEAD', data.RefValue(symbolic=False, value=oid))
     return oid
 
-def checkout(oid):
+def checkout(name):
     """
     checkout branch or paths to working directory
     """
+    oid = get_oid(name)
     commit = get_commit(oid)
     read_tree(commit.tree)
-    data.update_ref('HEAD', oid)
+    if is_branch(name):
+        HEAD = data.RefValue(symbolic=True, value=f'refs/heads/{name}')
+    else:
+        HEAD = data.RefValue(symbolic=False, value=oid)
+    
+    data.update_ref('HEAD', HEAD, deref=False)
 
 def create_tag(name, oid):
     """
     create the tag in refs/tags/
     """
-    data.update_ref(f'refs/tags/{name}', oid)
+    data.update_ref(f'refs/tags/{name}', data.RefValue(symbolic=False, value=oid))
+
+def create_branch(name, oid):
+    """
+    create the branch in refs/heads/
+    """
+    data.update_ref(f'refs/heads/{name}', data.RefValue(symbolic=False, value=oid))
+
+def is_branch(branch):
+    """
+    a helper function to test whether it is a branch
+    """
+    return data.get_ref(f'refs/heads/{branch}').value is not None
 
 Commit = namedtuple('Commit', ['tree', 'parent', 'message'])
 
@@ -171,8 +193,8 @@ def get_oid(name):
       f'refs/heads/{name}',
     ]
     for ref in refs_to_try:
-      if data.get_ref(ref):
-          return data.get_ref(ref)
+      if data.get_ref(ref, deref=False).value:
+          return data.get_ref(ref).value
     is_hex = all(c in string.hexdigits for c in name)
     if len(name) == 40 and is_hex:
         return name
