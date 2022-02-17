@@ -28,6 +28,19 @@ def get_ref(ref):
         with open(ref_path) as f:
             return f.read().strip()
 
+def iter_refs():
+    """
+    a generator which will iterate on all available refs
+    from the ugit directory and everything under .ugit/refs
+    """
+    refs = ['HEAD']
+    for root, _ , filenames in os.walk(f'{GIT_DIR}/refs'):
+        root = os.path.relpath(root, GIT_DIR)
+        refs.extend(f'{root}/{name}' for name in filenames)
+
+    for refname in refs:
+        yield refname, get_ref(refname)
+
 def hash_object(data, type_ = 'blob'):
     '''
     compute object ID and optionally create a blob from file

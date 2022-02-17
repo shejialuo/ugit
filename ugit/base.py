@@ -3,9 +3,7 @@ import operator
 import os
 import string
 
-from collections import namedtuple
-
-from collections import namedtuple
+from collections import deque, namedtuple
 
 from . import data
 
@@ -142,6 +140,24 @@ def get_commit(oid):
             raise TypeError(f'Unknown field {key}')
     message = '\n'.join(lines)
     return Commit(tree=tree, parent=parent, message=message)
+
+def iter_commits_and_parents(oids):
+    """
+    a generator that returns all commits that it can reach
+    from a given set of OIDs
+    """
+    oids = deque(oids)
+    visited = set()
+
+    while oids:
+        oid = oids.popleft()
+        if not oid or oid in visited:
+            continue
+        visited.add(oid)
+        yield oid
+
+        commit = get_commit(oid)
+        oids.appendleft(commit.parent)
 
 def get_oid(name):
     """
