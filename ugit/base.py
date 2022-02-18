@@ -1,11 +1,13 @@
 import itertools
 import operator
 import os
+from pickle import FALSE
 import string
 
 from collections import deque, namedtuple
 
 from . import data
+from . import diff
 
 def init():
     data.init()
@@ -112,6 +114,19 @@ def read_tree(tree_oid):
         with open (path, 'wb') as f:
             f.write (data.get_object(oid))
 
+def read_tree_merged(t_base, t_HEAD, t_other):
+    """
+    take two trees and extract a merged version
+    of them into the working directory
+    """
+    _empty_current_directory()
+    for path, blob in diff.merge_trees(get_tree(t_base),
+                                       get_tree(t_HEAD), 
+                                       get_tree(t_other)).items():
+        os.makedirs(f'./{os.path.dirname (path)}', exist_ok=True)
+        with open(path, 'wb') as f:
+            f.write(blob)
+
 def commit(message):
     """
     commit. A commit will just be a text file stored in
@@ -121,6 +136,10 @@ def commit(message):
     HEAD = data.get_ref('HEAD').value
     if HEAD:
         commit += f'parent {HEAD}\n'
+    MERGE_HEAD = data.get_ref('MERGE_HEAD').value
+    if MERGE_HEAD:
+        commit += f'parent {MERGE_HEAD}\n'
+        data.delete_ref('MERGE_HEAD', deref=FALSE)
     commit += '\n'
     commit += f'{message}\n'
     oid = data.hash_object(commit.encode(), 'commit')
@@ -143,6 +162,35 @@ def checkout(name):
 
 def reset(oid):
     data.update_ref('HEAD', data.RefValue(symbolic=False, value=oid))
+
+def merge(other):
+    HEAD = data.get_ref('HEAD').value
+    merge_base = get_merge_base(other, HEAD)
+    c_other = get_commit(other)
+
+    if merge_base == HEAD:
+        read_tree(c_other.tree)
+        data.update_ref('HEAD',
+                        data.RefValue(symbolic=False, value=other))
+        print('Fast-forward merge, no need to commit')
+        return
+
+    data.update_ref('MERGE_HEAD', data.RefValue(symbolic=False, value=other))
+
+    c_base = get_commit(merge_base)
+    c_HEAD = get_commit(HEAD)
+    read_tree_merged(c_base.tree ,c_HEAD.tree, c_other.tree)
+    print('Merged in working tree\nPlease commit')
+
+def get_merge_base(oid1, oid2):
+    """
+    receive two commit OIDs and find their common ancestor
+    """
+    parents1 = set(iter_commits_and_parents({oid1}))
+
+    for oid in iter_commits_and_parents({oid2}):
+        if oid in parents1:
+            return oid
 
 def create_tag(name, oid):
     """
@@ -181,13 +229,13 @@ def get_branch_name():
         raise ValueError(f'{HEAD} not start with refs/heads/')
     return os.path.relpath(HEAD, 'refs/heads')
 
-Commit = namedtuple('Commit', ['tree', 'parent', 'message'])
+Commit = namedtuple('Commit', ['tree', 'parents', 'message'])
 
 def get_commit(oid):
     """
     Traverse commit object to achieve `ugit log`
     """
-    parent = None
+    parents = []
     commit = data.get_object(oid, 'commit').decode()
     lines = iter(commit.splitlines())
     for line in itertools.takewhile(operator.truth, lines):
@@ -195,11 +243,11 @@ def get_commit(oid):
         if key == 'tree':
             tree = value
         elif key == 'parent':
-            parent = value
+            parents.append(value)
         else:
             raise TypeError(f'Unknown field {key}')
     message = '\n'.join(lines)
-    return Commit(tree=tree, parent=parent, message=message)
+    return Commit(tree=tree, parents=parents, message=message)
 
 def iter_commits_and_parents(oids):
     """
@@ -217,7 +265,8 @@ def iter_commits_and_parents(oids):
         yield oid
 
         commit = get_commit(oid)
-        oids.appendleft(commit.parent)
+        oids.extendleft(commit.parents[:1])
+        oids.extend(commit.parents[1:])
 
 def get_oid(name):
     """
