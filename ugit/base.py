@@ -66,6 +66,22 @@ def get_tree(oid, base_path=''):
             raise TypeError(f'Unknown tree entry {type_}')
     return result
 
+def get_working_tree():
+    """
+    walk over all files in the working directory, put them
+    in the object database and create a dict that holds all
+    the OIDs
+    """
+    result = {}
+    for root, _, filenames in os.walk('.'):
+        for filename in filenames:
+            path = os.path.relpath(f'{root}/{filename}')
+            if is_ignored(path) or not os.path.isfile(path):
+                continue
+            with open(path, 'rb') as f:
+                result[path] = data.hash_object(f.read())
+    return result
+
 def _empty_current_directory():
     """
     Delete all existing stuff before reading
