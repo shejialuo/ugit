@@ -6,6 +6,7 @@ import textwrap
 
 from . import data
 from . import base
+from . import diff
 
 def main():
     args = parse_args()
@@ -44,6 +45,10 @@ def parse_args():
     log_parser = commands.add_parser('log')
     log_parser.set_defaults(func=log)
     log_parser.add_argument('oid', default='@', type=oid, nargs='?')
+
+    show_parser = commands.add_parser('show')
+    show_parser.set_defaults(func=show)
+    show_parser.add_argument('oid', default='@', type=oid, nargs='?')
 
     checkout_parser = commands.add_parser('checkout')
     checkout_parser.set_defaults(func=checkout)
@@ -92,16 +97,31 @@ def read_tree(args):
 def commit(args):
     print(base.commit(args.message))
 
+def _print_commit(oid, commit, refs=None):
+    refs_str = f'({", ".join (refs)})' if refs else ''
+    print(f'commit {oid}{refs_str}\n')
+    print(textwrap.indent (commit.message, '    '))
+    print('')
+
 def log(args):
     refs = {}
     for refname, ref in data.iter_refs():
         refs.setdefault(ref.value, []).append(refname)
     for oid in base.iter_commits_and_parents({args.oid}):
         commit = base.get_commit(oid)
-        refs_str = f'({", ".join(refs[oid])})' if oid in refs else ''
-        print (f'commit {oid}{refs_str}\n')
-        print(textwrap.indent(commit.message, '    '))
-        print('')
+        _print_commit(oid, commit, refs.get(oid))
+
+def show(args):
+    if not args.oid:
+        return
+    commit = base.get_commit(args.oid)
+    parent_tree = None
+    if commit.parent:
+        parent_tree = base.get_commit(commit.parent).tree
+    _print_commit(args.oid, commit)
+    result = diff.diff_trees(base.get_tree(parent_tree),
+                             base.get_tree(commit.tree))
+    print(result)
 
 def checkout(args):
     base.checkout(args.commit)
